@@ -178,7 +178,7 @@ class Gemini extends BaseLLM {
     signal: AbortSignal,
     options: CompletionOptions,
   ): AsyncGenerator<ChatMessage> {
-    const isV1API = this.apiBase?.includes("/v1/");
+    const isV1API = /\/v1\/(?!beta)/.test(this.apiBase ?? "");
 
     const convertedMsgs = isV1API
       ? this.removeSystemMessage(messages)
@@ -464,11 +464,11 @@ class Gemini extends BaseLLM {
     options: CompletionOptions,
   ): AsyncGenerator<ChatMessage> {
     const apiURL = new URL(
-      `models/${options.model}:streamGenerateContent?key=${this.apiKey}`,
+      `models/${options.model}:streamGenerateContent`,
       this.apiBase,
     );
 
-    const isV1API = !!this.apiBase?.includes("/v1/");
+    const isV1API = /\/v1\/(?!beta)/.test(this.apiBase ?? "");
 
     // Convert chat messages to contents
     const body = this.prepareBody(messages, options, isV1API, true);
@@ -477,6 +477,10 @@ class Gemini extends BaseLLM {
       method: "POST",
       body: JSON.stringify(body),
       signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": this.apiKey ?? "",
+      },
     });
     for await (const message of this.processGeminiResponse(
       streamResponse(response),
