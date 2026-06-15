@@ -24,6 +24,7 @@ import { GhostTextAcceptanceTracker } from "./GhostTextAcceptanceTracker";
 import { getDefinitionsFromLsp } from "./lsp";
 import { RecentlyEditedTracker } from "./recentlyEdited";
 import { RecentlyVisitedRangesService } from "./RecentlyVisitedRangesService";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 import {
   StatusBarStatus,
   getStatusBarStatus,
@@ -446,6 +447,7 @@ export class ContinueCompletionProvider
         };
 
         setupStatusBar(undefined, true);
+        ThinkingIndicator.getInstance().show(editor, position);
 
         // Get initial completion.
         if (this.isNextEditActive) {
@@ -703,6 +705,7 @@ export class ContinueCompletionProvider
 
       return undefined;
     } finally {
+      ThinkingIndicator.getInstance().hide();
       stopStatusBarLoading();
     }
 

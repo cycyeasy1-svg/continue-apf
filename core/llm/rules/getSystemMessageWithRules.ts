@@ -215,6 +215,13 @@ export const shouldApplyRule = (
     return false;
   }
 
+  // Agent files (AGENTS.md / AGENT.md / CLAUDE.md) are opt-in: they apply only
+  // when the user has explicitly enabled them via rulePolicies. This must run
+  // before isGlobalRule so a frontmatter alwaysApply:true can't override the default-off.
+  if (rule.source === "agentFile") {
+    return policy === "on";
+  }
+
   // If it's a global rule, always apply it regardless of file paths
   if (isGlobalRule(rule)) {
     return true;

@@ -65,6 +65,32 @@ interface GeminiToolDelta
   };
 }
 
+/**
+ * [APF] 解析环境变量 GEMINI_CLI_CUSTOM_HEADERS，把自定义 HTTP header 注入到
+ * 所有 Gemini 请求中（流量统计等用途）。与 core/llm/llms/Gemini.ts 保持一致。
+ *
+ * 格式为 `header-name:header-value`；多个 header 用换行分隔。
+ * 示例：`x-summary-key:LDNavi/UI-renewal`
+ *
+ * 仅按第一个冒号拆分（value 中允许出现 `:` / `/` 等字符），首尾空白会被 trim。
+ * 无法解析的行（无冒号或 name 为空）会被忽略。未设置环境变量时返回空对象。
+ */
+function getGeminiCliCustomHeaders(): Record<string, string> {
+  const raw = process.env.GEMINI_CLI_CUSTOM_HEADERS;
+  if (!raw) return {};
+  const headers: Record<string, string> = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const entry = line.trim();
+    if (!entry) continue;
+    const sep = entry.indexOf(":");
+    if (sep <= 0) continue;
+    const name = entry.slice(0, sep).trim();
+    const value = entry.slice(sep + 1).trim();
+    if (name) headers[name] = value;
+  }
+  return headers;
+}
+
 export class GeminiApi implements BaseLlmApi {
   apiBase: string = "https://generativelanguage.googleapis.com/v1beta/";
   private genAI: GoogleGenAI;
@@ -73,14 +99,72 @@ export class GeminiApi implements BaseLlmApi {
 
   constructor(protected config: GeminiConfig) {
     this.apiBase = config.apiBase ?? this.apiBase;
+    // [APF] 与 core/llm/llms/Gemini.ts 保持一致：config 未填 apiKey 时从环境
+    // 变量读取，使"设 GOOGLE_API_KEY 即可用"对 SDK（Chat）路径也生效。
+    // 否则 default.ts 中 apiKey 为空时，SDK 用空 key 请求公司代理 → 401。
+    if (!this.config.apiKey) {
+      this.config.apiKey = process.env.GOOGLE_API_KEY ?? "";
+    }
     // Create GoogleGenAI with native fetch to avoid pollution
     // from Vercel AI SDK packages that can break stream handling
-    this.genAI = withNativeFetch(
-      () =>
-        new GoogleGenAI({
-          apiKey: this.config.apiKey,
-        }),
-    );
+    this.genAI = withNativeFetch(() => {
+      // [APF] @google/genai 1.46+ 不再读取 GOOGLE_GEMINI_BASE_URL 环境变量，
+      // 非 vertex 模式下 baseUrl 被 SDK 硬编码为 Google 官方域名（见 SDK
+      // ApiClient 构造函数）。这里通过 httpOptions.baseUrl 显式覆盖（SDK
+      // 优先级最高），使内网代理地址从 config.apiBase 生效。
+      const baseUrl = this.config.apiBase
+        ? GeminiApi.normalizeBaseUrl(this.config.apiBase)
+        : undefined;
+      // [APF] 注入 GEMINI_CLI_CUSTOM_HEADERS 自定义 header（流量统计等用途），
+      // 与旧代码路径(core/llm/llms/Gemini.ts)保持一致。SDK 会将其作为默认
+      // header 合并到每个请求（认证 header 仍由 SDK 自身添加，不受影响）。
+      const customHeaders = getGeminiCliCustomHeaders();
+      const httpOptions: {
+        baseUrl?: string;
+        headers?: Record<string, string>;
+      } = {};
+      if (baseUrl) httpOptions.baseUrl = baseUrl;
+      if (Object.keys(customHeaders).length > 0)
+        httpOptions.headers = customHeaders;
+      return new GoogleGenAI({
+        apiKey: this.config.apiKey,
+        ...(Object.keys(httpOptions).length > 0 ? { httpOptions } : {}),
+      });
+    });
+  }
+
+  /**
+   * [APF] 校验 Gemini 请求所需的配置（项目规约）。与 core/llm/llms/Gemini.ts
+   * 一致：缺失时抛错阻断。不在 constructor 抛出（避免搞坏 config 加载），改为
+   * 在请求入口校验，错误冒泡到 Chat UI 醒目显示。
+   *
+   * 必需项：
+   * - apiKey（来自 config 或 GOOGLE_API_KEY 环境变量，二选一）
+   * - GEMINI_CLI_CUSTOM_HEADERS（流量统计规约，强制）
+   */
+  private ensureGeminiConfigured(): void {
+    const missing: string[] = [];
+    if (!this.config.apiKey) {
+      missing.push("apiKey（config 的 apiKey 或环境变量 GOOGLE_API_KEY）");
+    }
+    if (Object.keys(getGeminiCliCustomHeaders()).length === 0) {
+      missing.push("GEMINI_CLI_CUSTOM_HEADERS");
+    }
+    if (missing.length > 0) {
+      throw new Error(
+        "[Continue APF] Gemini 配置缺失：" +
+          missing.join("、") +
+          "。请设置对应环境变量（或在 config 填写 apiKey）后重启 VS Code。",
+      );
+    }
+  }
+
+  /**
+   * SDK 会自动拼接 apiVersion（默认 v1beta），baseUrl 必须是根地址。
+   * 去掉末尾斜杠与 /v1beta、/v1beta1、/v1 等版本段，避免 URL 重复。
+   */
+  private static normalizeBaseUrl(apiBase: string): string {
+    return apiBase.replace(/\/+$/, "").replace(/\/v\d+(beta\d*)?$/i, "");
   }
 
   private _oaiPartToGeminiPart(
@@ -422,6 +506,7 @@ export class GeminiApi implements BaseLlmApi {
     body: ChatCompletionCreateParamsStreaming,
     _signal: AbortSignal,
   ): AsyncGenerator<ChatCompletionChunk> {
+    this.ensureGeminiConfigured();
     const convertedBody = this._convertBody(
       body,
       this.apiBase.includes("/v1/"),
@@ -468,6 +553,7 @@ export class GeminiApi implements BaseLlmApi {
   }
 
   async embed(body: EmbeddingCreateParams): Promise<CreateEmbeddingResponse> {
+    this.ensureGeminiConfigured();
     const inputs = Array.isArray(body.input) ? body.input : [body.input];
     const response = await customFetch(this.config.requestOptions)(
       new URL(`${body.model}:batchEmbedContents`, this.apiBase),
@@ -483,6 +569,8 @@ export class GeminiApi implements BaseLlmApi {
           })),
         }),
         headers: {
+          // [APF] 自定义 header 在前，认证/Content-Type 在后覆盖
+          ...getGeminiCliCustomHeaders(),
           // eslint-disable-next-line @typescript-eslint/naming-convention
           "x-goog-api-key": this.config.apiKey,
           // eslint-disable-next-line @typescript-eslint/naming-convention

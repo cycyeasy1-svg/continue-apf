@@ -9,6 +9,38 @@ export type ConfigState = {
   loading: boolean;
 };
 
+// [APF] Default-on UI settings for the chat experience.
+// Normalized here at the GUI config boundary so every read site
+// (settings toggles, Chat, markdown render, find/replace) sees the
+// same default instead of scattering `?? true` across components.
+// Explicit user values (including `false`) always win, and these
+// defaults never get written back to config.json — only explicit
+// user changes are persisted by the shared-config update path.
+const DEFAULT_UI_CONFIG = {
+  showSessionTabs: true,
+  codeWrap: true,
+  showChatScrollbar: true,
+} as const;
+
+function withDefaultUIConfig(
+  config: BrowserSerializedContinueConfig,
+): BrowserSerializedContinueConfig {
+  if (!config) {
+    return config;
+  }
+  return {
+    ...config,
+    ui: {
+      ...config.ui,
+      showSessionTabs:
+        config.ui?.showSessionTabs ?? DEFAULT_UI_CONFIG.showSessionTabs,
+      codeWrap: config.ui?.codeWrap ?? DEFAULT_UI_CONFIG.codeWrap,
+      showChatScrollbar:
+        config.ui?.showChatScrollbar ?? DEFAULT_UI_CONFIG.showChatScrollbar,
+    },
+  };
+}
+
 export const EMPTY_CONFIG: BrowserSerializedContinueConfig = {
   slashCommands: [],
   contextProviders: [],
@@ -67,7 +99,7 @@ export const configSlice = createSlice({
       if (!config) {
         state.config = EMPTY_CONFIG;
       } else {
-        state.config = config;
+        state.config = withDefaultUIConfig(config);
       }
       state.loading = false;
     },
@@ -75,7 +107,7 @@ export const configSlice = createSlice({
       state,
       { payload: config }: PayloadAction<BrowserSerializedContinueConfig>,
     ) => {
-      state.config = config;
+      state.config = withDefaultUIConfig(config);
     },
     setConfigLoading: (state, { payload: loading }: PayloadAction<boolean>) => {
       state.loading = loading;

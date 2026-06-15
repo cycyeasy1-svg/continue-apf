@@ -61,6 +61,8 @@ export function UserSettingsSection() {
     config.experimental?.enableExperimentalTools ?? false;
   const onlyUseSystemMessageTools =
     config.experimental?.onlyUseSystemMessageTools ?? false;
+  const enableAgentMode = config.experimental?.enableAgentMode ?? false;
+  const enablePlanMode = config.experimental?.enablePlanMode ?? false;
   const codebaseToolCallingOnly =
     config.experimental?.codebaseToolCallingOnly ?? false;
   const allowAnonymousTelemetry = config.allowAnonymousTelemetry ?? true;
@@ -263,6 +265,24 @@ export function UserSettingsSection() {
                     value={onlyUseSystemMessageTools}
                     onChange={(value) =>
                       handleUpdate({ onlyUseSystemMessageTools: value })
+                    }
+                  />
+                  <UserSetting
+                    type="toggle"
+                    title="Enable Agent mode"
+                    description=" Show Agent mode in the mode selector. When off (default), Agent is hidden and only Chat is available. Plan mode is controlled separately."
+                    value={enableAgentMode}
+                    onChange={(value) =>
+                      handleUpdate({ enableAgentMode: value })
+                    }
+                  />
+                  <UserSetting
+                    type="toggle"
+                    title="Enable Plan mode"
+                    description=" Show Plan mode (read-only/MCP tools) in the mode selector. When off (default), Plan is hidden."
+                    value={enablePlanMode}
+                    onChange={(value) =>
+                      handleUpdate({ enablePlanMode: value })
                     }
                   />
                   <UserSetting

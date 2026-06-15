@@ -1,5 +1,14 @@
 import { RuleMetadata } from "../..";
 import { getLastNPathParts } from "../../util/uri";
+import type { RulePolicy } from "./types";
+
+/**
+ * The default on/off policy for a rule when the user has not explicitly toggled it.
+ * Agent files (AGENTS.md / AGENT.md / CLAUDE.md) are opt-in; all other sources default on.
+ */
+export function getDefaultRulePolicy(rule: RuleMetadata): RulePolicy {
+  return rule.source === "agentFile" ? "off" : "on";
+}
 
 export function getRuleDisplayName(rule: RuleMetadata): string {
   if (rule.name) {

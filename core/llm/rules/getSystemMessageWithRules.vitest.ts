@@ -253,6 +253,45 @@ describe("Rule policies", () => {
   });
 });
 
+describe("Agent files default off", () => {
+  const agentFileRule: RuleWithSource = {
+    name: "proj/AGENTS.md",
+    rule: "Project agent instructions",
+    source: "agentFile",
+    sourceFile: "/path/to/proj/AGENTS.md",
+  };
+
+  const matchingFiles = ["src/components/Button.tsx"];
+
+  it("should not apply an agent file when no policy is set (default off)", () => {
+    // Empty policies -> default off
+    expect(shouldApplyRule(agentFileRule, matchingFiles, {})).toBe(false);
+    // Omitted policies (undefined) behaves the same
+    expect(shouldApplyRule(agentFileRule, matchingFiles)).toBe(false);
+  });
+
+  it("should apply an agent file only when explicitly enabled via 'on' policy", () => {
+    const policies: RulePolicies = { "proj/AGENTS.md": "on" };
+    expect(shouldApplyRule(agentFileRule, matchingFiles, policies)).toBe(true);
+  });
+
+  it("should not apply an agent file even if frontmatter sets alwaysApply: true", () => {
+    // The source check must precede isGlobalRule so alwaysApply can't override default-off.
+    const alwaysApplyAgentRule: RuleWithSource = {
+      ...agentFileRule,
+      alwaysApply: true,
+    };
+    expect(shouldApplyRule(alwaysApplyAgentRule, matchingFiles, {})).toBe(
+      false,
+    );
+  });
+
+  it("should not apply an agent file when policy is 'off'", () => {
+    const policies: RulePolicies = { "proj/AGENTS.md": "off" };
+    expect(shouldApplyRule(agentFileRule, matchingFiles, policies)).toBe(false);
+  });
+});
+
 describe("Content pattern matching", () => {
   it("should apply rules when file content matches pattern", () => {
     // Rule with pattern to match React component files

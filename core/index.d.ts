@@ -96,7 +96,8 @@ type RequiredLLMOptions =
   | "completionOptions";
 
 export interface ILLM
-  extends Omit<LLMOptions, RequiredLLMOptions>,
+  extends
+    Omit<LLMOptions, RequiredLLMOptions>,
     Required<Pick<LLMOptions, RequiredLLMOptions>> {
   get providerName(): string;
   get underlyingProviderName(): string;
@@ -1661,6 +1662,10 @@ export interface ExperimentalConfig {
   promptPath?: string;
   enableExperimentalTools?: boolean;
   onlyUseSystemMessageTools?: boolean;
+  /** When false (default), Agent mode is hidden from the mode selector. */
+  enableAgentMode?: boolean;
+  /** When false (default), Plan mode is hidden from the mode selector. */
+  enablePlanMode?: boolean;
 
   /**
    * Quick actions are a way to add custom commands to the Code Lens of

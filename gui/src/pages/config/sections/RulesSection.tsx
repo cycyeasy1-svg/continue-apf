@@ -18,7 +18,10 @@ import {
   DEFAULT_CHAT_SYSTEM_MESSAGE,
   DEFAULT_PLAN_SYSTEM_MESSAGE,
 } from "core/llm/defaultSystemMessages";
-import { getRuleDisplayName } from "core/llm/rules/rules-utils";
+import {
+  getDefaultRulePolicy,
+  getRuleDisplayName,
+} from "core/llm/rules/rules-utils";
 import { useContext, useMemo, useState } from "react";
 import { DropdownButton } from "../../../components/DropdownButton";
 import AddRuleDialog from "../../../components/dialogs/AddRuleDialog";
@@ -36,7 +39,6 @@ import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { useBookmarkedSlashCommands } from "../../../hooks/useBookmarkedSlashCommands";
 import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 import {
-  DEFAULT_RULE_SETTING,
   setDialogMessage,
   setShowDialog,
   toggleRuleSetting,
@@ -137,7 +139,7 @@ const RuleCard: React.FC<RuleCardProps> = ({ rule }) => {
   const ideMessenger = useContext(IdeMessengerContext);
   const policy = useAppSelector((state) =>
     rule.name
-      ? state.ui.ruleSettings[rule.name] || DEFAULT_RULE_SETTING
+      ? (state.ui.ruleSettings[rule.name] ?? getDefaultRulePolicy(rule))
       : undefined,
   );
 

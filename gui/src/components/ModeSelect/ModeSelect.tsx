@@ -19,6 +19,12 @@ import { ModeIcon } from "./ModeIcon";
 export function ModeSelect() {
   const dispatch = useAppDispatch();
   const mode = useAppSelector((store) => store.session.mode);
+  const enableAgentMode = useAppSelector(
+    (store) => store.config.config.experimental?.enableAgentMode ?? false,
+  );
+  const enablePlanMode = useAppSelector(
+    (store) => store.config.config.experimental?.enablePlanMode ?? false,
+  );
   const selectedModel = useAppSelector(selectSelectedChatModel);
 
   const isGoodAtAgentMode = useMemo(() => {
@@ -34,18 +40,28 @@ export function ModeSelect() {
   }, []);
 
   const cycleMode = useCallback(() => {
-    if (mode === "chat") {
-      dispatch(setMode("plan"));
-    } else if (mode === "plan") {
-      dispatch(setMode("agent"));
-    } else {
-      dispatch(setMode("chat"));
-    }
+    const order = (["chat", "plan", "agent"] as const).filter((m) => {
+      if (m === "chat") return true;
+      if (m === "plan") return enablePlanMode;
+      return enableAgentMode;
+    });
+    const idx = order.indexOf(mode as "chat" | "plan" | "agent");
+    const next = idx >= 0 ? order[(idx + 1) % order.length] : "chat";
+    dispatch(setMode(next));
     // Only focus main editor if another one doesn't already have focus
     if (!document.activeElement?.classList?.contains("ProseMirror")) {
       mainEditor?.commands.focus();
     }
-  }, [mode, mainEditor]);
+  }, [mode, enablePlanMode, enableAgentMode, mainEditor]);
+
+  // If the active mode is disabled via settings, fall back to chat.
+  useEffect(() => {
+    if (mode === "agent" && !enableAgentMode) {
+      dispatch(setMode("chat"));
+    } else if (mode === "plan" && !enablePlanMode) {
+      dispatch(setMode("chat"));
+    }
+  }, [mode, enableAgentMode, enablePlanMode, dispatch]);
 
   const selectMode = useCallback(
     (newMode: MessageModes) => {
@@ -126,43 +142,47 @@ export function ModeSelect() {
             </div>
             {mode === "chat" && <CheckIcon className="ml-auto h-3 w-3" />}
           </ListboxOption>
-          <ListboxOption value="plan" className={"gap-1"}>
-            <div className="flex flex-row items-center gap-1.5">
-              <ModeIcon mode="plan" />
-              <span className="">Plan</span>
-              <ToolTip
-                style={{
-                  zIndex: 200001,
-                }}
-                content="Read-only/MCP tools available"
-              >
-                <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
-              </ToolTip>
-            </div>
-            {!isGoodAtAgentMode && notGreatAtAgent("Plan")}
-            <CheckIcon
-              className={`ml-auto h-3 w-3 ${mode === "plan" ? "" : "opacity-0"}`}
-            />
-          </ListboxOption>
+          {(enablePlanMode || mode === "plan") && (
+            <ListboxOption value="plan" className={"gap-1"}>
+              <div className="flex flex-row items-center gap-1.5">
+                <ModeIcon mode="plan" />
+                <span className="">Plan</span>
+                <ToolTip
+                  style={{
+                    zIndex: 200001,
+                  }}
+                  content="Read-only/MCP tools available"
+                >
+                  <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
+                </ToolTip>
+              </div>
+              {!isGoodAtAgentMode && notGreatAtAgent("Plan")}
+              <CheckIcon
+                className={`ml-auto h-3 w-3 ${mode === "plan" ? "" : "opacity-0"}`}
+              />
+            </ListboxOption>
+          )}
 
-          <ListboxOption value="agent" className={"gap-1"}>
-            <div className="flex flex-row items-center gap-1.5">
-              <ModeIcon mode="agent" />
-              <span className="">Agent</span>
-              <ToolTip
-                style={{
-                  zIndex: 200001,
-                }}
-                content="All tools available"
-              >
-                <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
-              </ToolTip>
-            </div>
-            {!isGoodAtAgentMode && notGreatAtAgent("Agent")}
-            <CheckIcon
-              className={`ml-auto h-3 w-3 ${mode === "agent" ? "" : "opacity-0"}`}
-            />
-          </ListboxOption>
+          {(enableAgentMode || mode === "agent") && (
+            <ListboxOption value="agent" className={"gap-1"}>
+              <div className="flex flex-row items-center gap-1.5">
+                <ModeIcon mode="agent" />
+                <span className="">Agent</span>
+                <ToolTip
+                  style={{
+                    zIndex: 200001,
+                  }}
+                  content="All tools available"
+                >
+                  <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
+                </ToolTip>
+              </div>
+              {!isGoodAtAgentMode && notGreatAtAgent("Agent")}
+              <CheckIcon
+                className={`ml-auto h-3 w-3 ${mode === "agent" ? "" : "opacity-0"}`}
+              />
+            </ListboxOption>
+          )}
 
           <div className="text-description-muted px-2 py-1">
             {`${metaKeyLabel} . for next mode`}

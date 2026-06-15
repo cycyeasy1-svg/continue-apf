@@ -2,7 +2,7 @@
   "name": "continue-apf",
   "icon": "media/icon.png",
   "author": "Continue Dev, Inc",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/continuedev/continue"
@@ -97,6 +97,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show inline suggestion to use the Continue keyboard shortcuts (e.g. \"Cmd/Ctrl L to select code, Cmd/Ctrl I to edit\")."
+        },
+        "continue.showThinkingIndicator": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a subtle \"✨ 思考中...\" hint at the cursor while waiting for a tab autocomplete response. Only appears for slow responses."
         },
         "continue.disableQuickFix": {
           "type": "boolean",

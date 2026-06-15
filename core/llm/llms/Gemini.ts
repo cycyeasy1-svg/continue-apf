@@ -33,15 +33,77 @@ interface GeminiToolCallDelta extends ToolCallDelta {
   };
 }
 
+/**
+ * [APF] 解析环境变量 GEMINI_CLI_CUSTOM_HEADERS，把自定义 HTTP header 注入到
+ * 所有 Gemini 请求中（流量统计等用途）。
+ *
+ * 格式为 `header-name:header-value`；多个 header 用换行分隔。
+ * 示例：`x-summary-key:LDNavi/UI-renewal`
+ *
+ * 仅按第一个冒号拆分（value 中允许出现 `:` / `/` 等字符），首尾空白会被 trim。
+ * 无法解析的行（无冒号或 name 为空）会被忽略。未设置环境变量时返回空对象。
+ */
+function getGeminiCliCustomHeaders(): Record<string, string> {
+  const raw = process.env.GEMINI_CLI_CUSTOM_HEADERS;
+  if (!raw) return {};
+  const headers: Record<string, string> = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const entry = line.trim();
+    if (!entry) continue;
+    const sep = entry.indexOf(":");
+    if (sep <= 0) continue;
+    const name = entry.slice(0, sep).trim();
+    const value = entry.slice(sep + 1).trim();
+    if (name) headers[name] = value;
+  }
+  return headers;
+}
+
 class Gemini extends BaseLLM {
   static providerName = "gemini";
 
   static defaultOptions: Partial<LLMOptions> = {
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash",
     apiBase: "https://generativelanguage.googleapis.com/v1beta/",
     maxStopWords: 5,
     maxEmbeddingBatchSize: 100,
   };
+
+  // [APF] 如果用户未在 config 中配置 apiKey，从环境变量读取
+  constructor(options: LLMOptions) {
+    super(options);
+    if (!this.apiKey) {
+      this.apiKey = process.env.GOOGLE_API_KEY;
+    }
+  }
+
+  /**
+   * [APF] 校验 Gemini 请求所需的配置（项目规约）。缺失时抛出醒目错误以阻断请求。
+   *
+   * 必需项：
+   * - apiKey（来自 config 或 GOOGLE_API_KEY 环境变量，二选一）
+   * - GEMINI_CLI_CUSTOM_HEADERS（流量统计规约，强制）
+   *
+   * 刻意不在 constructor 抛出 —— load.ts 构造模型时无 try-catch，constructor
+   * 抛错会让整个 config 加载失败（所有模型都不可用）。改为在请求入口校验，
+   * 既阻断该次请求，又不影响模型列表加载；错误会冒泡到 Chat UI 醒目显示。
+   */
+  private ensureGeminiConfigured(): void {
+    const missing: string[] = [];
+    if (!this.apiKey) {
+      missing.push("apiKey（config 的 apiKey 或环境变量 GOOGLE_API_KEY）");
+    }
+    if (Object.keys(getGeminiCliCustomHeaders()).length === 0) {
+      missing.push("GEMINI_CLI_CUSTOM_HEADERS");
+    }
+    if (missing.length > 0) {
+      throw new Error(
+        "[Continue APF] Gemini 配置缺失：" +
+          missing.join("、") +
+          "。请设置对应环境变量（或在 config 填写 apiKey）后重启 VS Code。",
+      );
+    }
+  }
 
   protected useOpenAIAdapterFor: (LlmApiRequestType | "*")[] = [
     "chat",
@@ -76,6 +138,18 @@ class Gemini extends BaseLLM {
         .slice(0, this.maxStopWords ?? Gemini.defaultOptions.maxStopWords);
     }
 
+    // [APF] Map Continue's reasoning controls to Gemini's thinkingConfig.
+    // - reasoning: false          -> thinkingBudget: 0 (disable thinking entirely)
+    // - reasoningBudgetTokens: N  -> thinkingBudget: N
+    // Disabling thinking is what makes Gemini viable for low-latency autocomplete.
+    if (options.reasoning === false) {
+      finalOptions.thinkingConfig = { thinkingBudget: 0 };
+    } else if (options.reasoningBudgetTokens !== undefined) {
+      finalOptions.thinkingConfig = {
+        thinkingBudget: options.reasoningBudgetTokens,
+      };
+    }
+
     return finalOptions;
   }
 
@@ -84,10 +158,19 @@ class Gemini extends BaseLLM {
     signal: AbortSignal,
     options: CompletionOptions,
   ): AsyncGenerator<string> {
+    // [APF] Autocomplete (single-prompt completion) should never pay the
+    // latency cost of Gemini thinking. Default to reasoning: false unless the
+    // caller explicitly requested reasoning. This is the main lever for
+    // reducing autocomplete delay on Gemini 2.5/3.5 Flash.
+    const completionOptions: CompletionOptions = {
+      ...options,
+      reasoning: options.reasoning ?? false,
+    };
+
     for await (const message of this._streamChat(
       [{ content: prompt, role: "user" }],
       signal,
-      options,
+      completionOptions,
     )) {
       yield renderChatMessage(message);
     }
@@ -178,6 +261,7 @@ class Gemini extends BaseLLM {
     signal: AbortSignal,
     options: CompletionOptions,
   ): AsyncGenerator<ChatMessage> {
+    this.ensureGeminiConfigured();
     const isV1API = /\/v1\/(?!beta)/.test(this.apiBase ?? "");
 
     const convertedMsgs = isV1API
@@ -478,6 +562,8 @@ class Gemini extends BaseLLM {
       body: JSON.stringify(body),
       signal,
       headers: {
+        // [APF] 自定义 header 在前，认证/Content-Type 在后覆盖，避免破坏认证
+        ...getGeminiCliCustomHeaders(),
         "Content-Type": "application/json",
         "x-goog-api-key": this.apiKey ?? "",
       },
@@ -507,6 +593,8 @@ class Gemini extends BaseLLM {
       method: "POST",
       body: JSON.stringify(body),
       signal,
+      // [APF] 追加自定义统计 header（认证仍走 URL 的 ?key= 参数，保持不变）
+      headers: getGeminiCliCustomHeaders(),
     });
     if (response.status === 499) {
       return; // Aborted by user
@@ -516,6 +604,7 @@ class Gemini extends BaseLLM {
   }
 
   async _embed(batch: string[]): Promise<number[][]> {
+    this.ensureGeminiConfigured();
     // Batch embed endpoint: https://ai.google.dev/api/embeddings?authuser=1#EmbedContentRequest
     const requests = batch.map((text) => ({
       model: this.model,
@@ -533,6 +622,8 @@ class Gemini extends BaseLLM {
           requests,
         }),
         headers: {
+          // [APF] 自定义 header 在前，认证/Content-Type 在后覆盖
+          ...getGeminiCliCustomHeaders(),
           "x-goog-api-key": this.apiKey,
           "Content-Type": "application/json",
         } as any,

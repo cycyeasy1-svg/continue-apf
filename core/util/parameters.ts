@@ -3,9 +3,14 @@ import { TabAutocompleteOptions } from "../index.js";
 export const DEFAULT_AUTOCOMPLETE_OPTS: TabAutocompleteOptions = {
   disable: false,
   maxPromptTokens: 1024,
-  prefixPercentage: 0.3,
+  // [APF] Show more leading context (0.3 -> 0.4) for better single-line/multiline
+  // completion accuracy. Slightly larger prompt, but negligible vs. the latency
+  // saved by disabling Gemini thinking.
+  prefixPercentage: 0.4,
   maxSuffixPercentage: 0.2,
-  debounceDelay: 350,
+  // [APF] Faster trigger after the user stops typing (350 -> 250ms). Pure
+  // latency win, no effect on completion quality.
+  debounceDelay: 250,
   modelTimeout: 150,
   multilineCompletions: "auto",
   // @deprecated TO BE REMOVED

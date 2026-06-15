@@ -1,0 +1,16 @@
+allowBuilds:
+  '@biomejs/biome': set this to true or false
+  '@google/genai': set this to true or false
+  '@openapitools/openapi-generator-cli': set this to true or false
+  '@vscode/vsce-sign': set this to true or false
+  es5-ext: set this to true or false
+  esbuild: set this to true or false
+  keytar: set this to true or false
+  protobufjs: set this to true or false
+  puppeteer: set this to true or false
+  puppeteer-chromium-resolver: set this to true or false
+  sharp: set this to true or false
+  sqlite3: set this to true or false
+  win-ca: set this to true or false
+  win-export-certificate-and-key: set this to true or false
+  yarn: set this to true or false

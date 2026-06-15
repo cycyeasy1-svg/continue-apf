@@ -342,6 +342,22 @@ export async function configYamlToContinueConfig(options: {
     }
   }
 
+  // Top-level tabAutocompleteModel (mirrors the config.json path in load.ts:347)
+  if (config.tabAutocompleteModel) {
+    const autocompleteModels = Array.isArray(config.tabAutocompleteModel)
+      ? config.tabAutocompleteModel
+      : [config.tabAutocompleteModel];
+    for (const model of autocompleteModels) {
+      const llms = await llmsFromModelConfig({
+        model,
+        uniqueId,
+        llmLogger,
+        config: continueConfig,
+      });
+      continueConfig.modelsByRole.autocomplete.push(...llms);
+    }
+  }
+
   // Add transformers js to the embed models in vs code if not already added
   if (
     ideInfo.ideType === "vscode" &&

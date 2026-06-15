@@ -3308,13 +3308,13 @@
               "title": "Show Chat Scrollbar",
               "markdownDescription": "If set to `true`, a scrollbar will be displayed in the chat window to navigate through messages.",
               "x-intellij-html-description": "If set to <code>true</code>, a scrollbar will be displayed in the chat window to navigate through messages.",
-              "default": false,
+              "default": true,
               "type": "boolean"
             },
             "codeWrap": {
               "type": "boolean",
               "description": "If set to true, code in pre blocks will wrap.",
-              "default": false
+              "default": true
             }
           }
         },

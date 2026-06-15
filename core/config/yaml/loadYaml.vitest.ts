@@ -1,5 +1,6 @@
 import {
   AssistantUnrolledNonNullable,
+  parseConfigYaml,
   validateConfigYaml,
 } from "@continuedev/config-yaml";
 import { describe, expect, it } from "vitest";
@@ -124,5 +125,46 @@ describe("MCP Server cwd configuration", () => {
         expect(errors).toHaveLength(0);
       });
     });
+  });
+});
+
+describe("Top-level tabAutocompleteModel", () => {
+  it("should preserve a single top-level tabAutocompleteModel when parsing YAML", () => {
+    const yaml = [
+      "name: test-agent",
+      'version: "1.0.0"',
+      "tabAutocompleteModel:",
+      "  provider: gemini",
+      "  name: Autocomplete",
+      "  model: gemini-3.5-flash",
+      '  apiKey: ""',
+      "  apiBase: https://example.com/proxy",
+    ].join("\n");
+
+    const parsed = parseConfigYaml(yaml);
+
+    // Before the fix this field was stripped by the schema (undefined).
+    expect(parsed.tabAutocompleteModel).toBeDefined();
+    expect(parsed.tabAutocompleteModel).toMatchObject({
+      provider: "gemini",
+      name: "Autocomplete",
+      model: "gemini-3.5-flash",
+    });
+  });
+
+  it("should preserve an array of top-level tabAutocompleteModel entries when parsing YAML", () => {
+    const yaml = [
+      "name: test-agent",
+      'version: "1.0.0"',
+      "tabAutocompleteModel:",
+      "  - provider: gemini",
+      "    name: Autocomplete",
+      "    model: gemini-3.5-flash",
+    ].join("\n");
+
+    const parsed = parseConfigYaml(yaml);
+
+    expect(Array.isArray(parsed.tabAutocompleteModel)).toBe(true);
+    expect(parsed.tabAutocompleteModel).toHaveLength(1);
   });
 });

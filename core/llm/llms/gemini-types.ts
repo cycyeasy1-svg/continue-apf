@@ -15,6 +15,12 @@ export interface GeminiGenerationConfig {
   responseLogprobs?: boolean;
   logprobs?: number;
   // responseSchema?: object; // https://ai.google.dev/api/caching#Schema
+  // [APF] Gemini 2.5+ thinking control. thinkingBudget: 0 disables thinking
+  // entirely, which is critical for low-latency autocomplete.
+  thinkingConfig?: {
+    thinkingBudget?: number;
+    includeThoughts?: boolean;
+  };
 }
 
 export type GeminiObjectSchemaType =
